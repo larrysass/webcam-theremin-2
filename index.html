@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webcam Theremin</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Webcam Theremin</h1>
+        <p id="status">Loading hand tracking model…</p>
+      </header>
+
+      <div id="stage">
+        <!-- Video is hidden; we draw its frames onto the canvas each tick -->
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+
+        <div id="legend">
+          <span class="legend-pitch">&#9632; Right hand — pitch (left/right)</span>
+          <span class="legend-volume">&#9632; Left hand — volume (up/down)</span>
+        </div>
+      </div>
+
+      <div id="controls">
+        <div id="meters">
+          <div class="meter">
+            <label>Pitch</label>
+            <span id="pitch-display">—</span>
+          </div>
+          <div class="meter">
+            <label>Volume</label>
+            <div id="volume-bar-wrap">
+              <div id="volume-bar"></div>
+            </div>
+          </div>
+        </div>
+        <button id="start-btn" disabled>Start</button>
+      </div>
+
+      <div id="options">
+        <div class="option-group">
+          <label>Wave</label>
+          <div class="btn-group" id="wave-btns">
+            <button class="wave-btn active" data-wave="sine">sine</button>
+            <button class="wave-btn" data-wave="triangle">tri</button>
+            <button class="wave-btn" data-wave="sawtooth">saw</button>
+            <button class="wave-btn" data-wave="square">sqr</button>
+          </div>
+        </div>
+        <div class="option-group">
+          <label>Quantize</label>
+          <button id="quantize-btn" class="toggle-btn">off</button>
+          <select id="scale-select" disabled>
+            <option value="chromatic">chromatic</option>
+            <option value="major">major</option>
+            <option value="minor">minor</option>
+            <option value="pentatonic_major">penta maj</option>
+            <option value="pentatonic_minor">penta min</option>
+            <option value="blues">blues</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Sustain</label>
+          <button id="sustain-btn" class="toggle-btn">off</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

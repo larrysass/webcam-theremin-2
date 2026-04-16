@@ -1,6 +1,8 @@
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
+import { Game } from "./game";
+import { SONGS } from "./song";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -96,17 +98,24 @@ const gainFromRawY = (rawY: number): number => {
 
 class Theremin {
   // DOM
-  readonly #video:        HTMLVideoElement;
-  readonly #canvas:       HTMLCanvasElement;
-  readonly #ctx:          CanvasRenderingContext2D;
-  readonly #startBtn:     HTMLButtonElement;
-  readonly #statusEl:     HTMLParagraphElement;
-  readonly #pitchDisplay: HTMLSpanElement;
-  readonly #volumeBar:    HTMLDivElement;
-  readonly #waveBtns:     NodeListOf<HTMLButtonElement>;
-  readonly #quantizeBtn:  HTMLButtonElement;
-  readonly #scaleSelect:  HTMLSelectElement;
-  readonly #sustainBtn:   HTMLButtonElement;
+  readonly #video:          HTMLVideoElement;
+  readonly #canvas:         HTMLCanvasElement;
+  readonly #ctx:            CanvasRenderingContext2D;
+  readonly #startBtn:       HTMLButtonElement;
+  readonly #statusEl:       HTMLParagraphElement;
+  readonly #pitchDisplay:   HTMLSpanElement;
+  readonly #volumeBar:      HTMLDivElement;
+  readonly #waveBtns:       NodeListOf<HTMLButtonElement>;
+  readonly #quantizeBtn:    HTMLButtonElement;
+  readonly #scaleSelect:    HTMLSelectElement;
+  readonly #sustainBtn:     HTMLButtonElement;
+  readonly #gameBtn:        HTMLButtonElement;
+  readonly #songSelect:     HTMLSelectElement;
+  readonly #waveformCanvas: HTMLCanvasElement;
+  readonly #waveformCtx:    CanvasRenderingContext2D;
+
+  // Game
+  #game: Game;
 
   // MediaPipe
   #landmarker:    HandLandmarker | null = null;
@@ -115,6 +124,7 @@ class Theremin {
   #oscillator:  Tone.Oscillator | null = null;
   #vibratoNode: Tone.Vibrato    | null = null;
   #gain:        Tone.Gain       | null = null;
+  #analyser:    Tone.Analyser   | null = null;
 
   // Playback state
   #isPlaying    = false;
@@ -145,6 +155,23 @@ class Theremin {
     this.#quantizeBtn  = document.getElementById("quantize-btn")  as HTMLButtonElement;
     this.#scaleSelect  = document.getElementById("scale-select")  as HTMLSelectElement;
     this.#sustainBtn   = document.getElementById("sustain-btn")   as HTMLButtonElement;
+    this.#gameBtn        = document.getElementById("game-btn")      as HTMLButtonElement;
+    this.#songSelect     = document.getElementById("song-select")   as HTMLSelectElement;
+    this.#waveformCanvas = document.getElementById("waveform")      as HTMLCanvasElement;
+    this.#waveformCtx    = this.#waveformCanvas.getContext("2d")!;
+
+    // Populate song dropdown from catalogue
+    SONGS.forEach((s, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = s.title;
+      this.#songSelect.appendChild(opt);
+    });
+
+    this.#game = new Game(
+      document.getElementById("game-canvas") as HTMLCanvasElement,
+      () => ({ freq: this.#smoothFreq, gain: this.#smoothGain }),
+    );
 
     this.#bindEvents();
   }
@@ -183,6 +210,10 @@ class Theremin {
 
     this.#statusEl.textContent = "Ready — raise hands to play";
     this.#startBtn.disabled = false;
+
+    this.#waveformCanvas.width  = this.#waveformCanvas.offsetWidth;
+    this.#waveformCanvas.height = this.#waveformCanvas.offsetHeight;
+    this.#drawIdleWaveform();
   }
 
   // -------------------------------------------------------------------------
@@ -215,6 +246,26 @@ class Theremin {
       this.#sustainBtn.textContent = this.#sustainEnabled ? "on" : "off";
       this.#sustainBtn.classList.toggle("on", this.#sustainEnabled);
     });
+
+    this.#songSelect.addEventListener("change", () => {
+      const config = SONGS[Number(this.#songSelect.value)];
+      if (config) this.#game.setSong(config);
+    });
+
+    this.#gameBtn.addEventListener("click", async () => {
+      if (this.#game.isRunning) {
+        this.#game.stop();
+        this.#gameBtn.textContent = "Play";
+        this.#gameBtn.classList.remove("playing");
+        this.#songSelect.disabled = false;
+      } else {
+        await Tone.start();
+        this.#songSelect.disabled = true;
+        this.#game.start();
+        this.#gameBtn.textContent = "Stop";
+        this.#gameBtn.classList.add("playing");
+      }
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -223,6 +274,8 @@ class Theremin {
 
   #startAudio() {
     this.#gain        = new Tone.Gain(0).toDestination();
+    this.#analyser    = new Tone.Analyser("waveform", 1024);
+    this.#gain.connect(this.#analyser);
     this.#vibratoNode = new Tone.Vibrato({ frequency: 5.5, depth: 0, wet: 1 });
     this.#vibratoNode.connect(this.#gain);
     this.#oscillator  = new Tone.Oscillator(440, this.#waveform);
@@ -235,9 +288,12 @@ class Theremin {
     this.#oscillator?.dispose();
     this.#vibratoNode?.dispose();
     this.#gain?.dispose();
+    this.#analyser?.dispose();
     this.#oscillator  = null;
     this.#vibratoNode = null;
     this.#gain        = null;
+    this.#analyser    = null;
+    this.#drawIdleWaveform();
   }
 
   // -------------------------------------------------------------------------
@@ -350,6 +406,8 @@ class Theremin {
     // --- Update HUD ---
     this.#pitchDisplay.textContent = `${Math.round(this.#smoothFreq)} Hz  ${freqToNote(this.#smoothFreq)}`;
     this.#volumeBar.style.width    = `${Math.round(this.#smoothGain * 100)}%`;
+
+    this.#drawWaveform();
   };
 
   // -------------------------------------------------------------------------
@@ -379,6 +437,54 @@ class Theremin {
     }
 
     this.#ctx.globalAlpha = 1;
+  }
+
+  // -------------------------------------------------------------------------
+  // Waveform visualizer
+  // -------------------------------------------------------------------------
+
+  #drawWaveform() {
+    if (!this.#analyser) return;
+
+    const data   = this.#analyser.getValue() as Float32Array;
+    const canvas = this.#waveformCanvas;
+    const ctx    = this.#waveformCtx;
+    const { width, height } = canvas;
+    const mid    = height / 2;
+
+    ctx.fillStyle = "#0b0b0b";
+    ctx.fillRect(0, 0, width, height);
+
+    // Color and glow track the pitch color (green) when audible, dim when silent
+    const audible = this.#smoothGain > 0.01;
+    ctx.strokeStyle = audible ? "#00ff88" : "rgba(0,255,136,0.18)";
+    ctx.lineWidth   = 1.5;
+    ctx.shadowColor = "#00ff88";
+    ctx.shadowBlur  = audible ? 6 : 0;
+
+    ctx.beginPath();
+    const step = width / (data.length - 1);
+    for (let i = 0; i < data.length; i++) {
+      const x = i * step;
+      const y = mid - data[i] * mid * 0.85;  // scale so peaks don't clip edges
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  #drawIdleWaveform() {
+    const ctx    = this.#waveformCtx;
+    const { width, height } = this.#waveformCanvas;
+
+    ctx.fillStyle   = "#0b0b0b";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(0,255,136,0.18)";
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(0,     height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
   }
 
   // -------------------------------------------------------------------------

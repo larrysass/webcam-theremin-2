@@ -13,6 +13,18 @@
         <p id="status">Loading hand tracking model…</p>
       </header>
 
+      <div id="game-section">
+        <div id="game-header">
+          <span id="game-title">Take Me Out to the Ballgame</span>
+          <span id="game-hint">right hand = pitch &nbsp;|&nbsp; left hand = volume</span>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="game-controls">
+          <select id="song-select"></select>
+          <button id="game-btn">Play</button>
+        </div>
+      </div>
+
       <div id="stage">
         <!-- Video is hidden; we draw its frames onto the canvas each tick -->
         <video id="video" autoplay playsinline muted></video>
@@ -23,6 +35,8 @@
           <span class="legend-volume">&#9632; Left hand — volume (up/down)</span>
         </div>
       </div>
+
+      <canvas id="waveform"></canvas>
 
       <div id="controls">
         <div id="meters">

@@ -1,12 +1,16 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --pitch-color: #00ff88;
+  --pitch-color:  #00ff88;
   --volume-color: #ff6b35;
-  --bg: #0d0d0d;
-  --surface: #1a1a1a;
-  --text: #e0e0e0;
-  --muted: #666;
+  --miss-color:   #ff4444;
+  --bg:           #0d0d0d;
+  --surface:      #1a1a1a;
+  --bg-deep:      #0b0b0b;
+  --text:         #e0e0e0;
+  --muted:        #666;
+  --border:       #2a2a2a;
+  --border-mid:   #3a3a3a;
 }
 
 body {
@@ -54,7 +58,7 @@ h1 {
   width: 100%;
   aspect-ratio: 4/3;
   background: #000;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -100,8 +104,8 @@ h1 {
   display: block;
   width: 100%;
   height: 56px;
-  background: #0b0b0b;
-  border: 1px solid #2a2a2a;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 
@@ -143,7 +147,7 @@ h1 {
 #volume-bar-wrap {
   width: 80px;
   height: 6px;
-  background: #2a2a2a;
+  background: var(--border);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -172,7 +176,7 @@ h1 {
 }
 
 #start-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 136, 0.1);
+  background: color-mix(in srgb, var(--pitch-color) 10%, transparent);
   box-shadow: 0 0 10px var(--pitch-color);
 }
 
@@ -182,7 +186,7 @@ h1 {
 }
 
 #start-btn.playing:hover {
-  background: rgba(255, 107, 53, 0.1);
+  background: color-mix(in srgb, var(--volume-color) 10%, transparent);
   box-shadow: 0 0 10px var(--volume-color);
 }
 
@@ -197,10 +201,10 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
-  background: #0b0b0b;
+  background: var(--bg-deep);
 }
 
 #game-header {
@@ -238,8 +242,8 @@ h1 {
 #song-select {
   font-family: inherit;
   font-size: 0.7rem;
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
+  background: var(--surface);
+  border: 1px solid var(--border-mid);
   color: var(--text);
   padding: 0.25rem 0.4rem;
   border-radius: 2px;
@@ -247,7 +251,7 @@ h1 {
   flex: 1;
 }
 
-#song-select:hover { border-color: #666; }
+#song-select:hover { border-color: var(--muted); }
 #song-select:disabled { opacity: 0.35; cursor: not-allowed; }
 
 #game-btn {
@@ -257,7 +261,7 @@ h1 {
   text-transform: uppercase;
   padding: 0.35rem 1.2rem;
   background: transparent;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border-mid);
   color: var(--text);
   border-radius: 2px;
   cursor: pointer;
@@ -275,7 +279,7 @@ h1 {
 }
 
 #game-btn.playing:hover {
-  background: rgba(255, 107, 53, 0.1);
+  background: color-mix(in srgb, var(--volume-color) 10%, transparent);
 }
 
 /* Options row */
@@ -285,7 +289,7 @@ h1 {
   gap: 1.25rem;
   width: 100%;
   padding-top: 0.5rem;
-  border-top: 1px solid #2a2a2a;
+  border-top: 1px solid var(--border);
   flex-wrap: wrap;
 }
 
@@ -314,7 +318,7 @@ h1 {
   letter-spacing: 0.08em;
   padding: 0.25rem 0.55rem;
   background: transparent;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border-mid);
   color: var(--muted);
   cursor: pointer;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
@@ -325,13 +329,13 @@ h1 {
 .wave-btn + .wave-btn { border-left: none; }
 
 .wave-btn.active {
-  background: rgba(0, 255, 136, 0.12);
+  background: color-mix(in srgb, var(--pitch-color) 12%, transparent);
   border-color: var(--pitch-color);
   color: var(--pitch-color);
 }
 
 .wave-btn:hover:not(.active) {
-  border-color: #666;
+  border-color: var(--muted);
   color: var(--text);
 }
 
@@ -342,21 +346,21 @@ h1 {
 }
 
 .toggle-btn.on {
-  background: rgba(0, 255, 136, 0.12);
+  background: color-mix(in srgb, var(--pitch-color) 12%, transparent);
   border-color: var(--pitch-color);
   color: var(--pitch-color);
 }
 
 .toggle-btn:hover:not(.on) {
-  border-color: #666;
+  border-color: var(--muted);
   color: var(--text);
 }
 
 #scale-select {
   font-family: inherit;
   font-size: 0.7rem;
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
+  background: var(--surface);
+  border: 1px solid var(--border-mid);
   color: var(--text);
   padding: 0.2rem 0.4rem;
   border-radius: 2px;
@@ -369,5 +373,5 @@ h1 {
 }
 
 #scale-select:not(:disabled):hover {
-  border-color: #666;
+  border-color: var(--muted);
 }

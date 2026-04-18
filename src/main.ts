@@ -3,6 +3,7 @@ import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 import { Game } from "./game";
 import { SONGS } from "./song";
+import { PITCH_COLOR, VOLUME_COLOR, BG_DEEP } from "./tokens";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -360,7 +361,7 @@ class Theremin {
     if (rightHand) {
       targetFreq = pitchFromRawX(rightHand[INDEX_TIP].x);
       if (this.#quantizeEnabled) targetFreq = quantize(targetFreq, SCALES[this.#scaleSelect.value]);
-      this.#drawHand(rightHand, "#00ff88");
+      this.#drawHand(rightHand, PITCH_COLOR);
 
       this.#wristYHistory.push(rightHand[WRIST].y);
       if (this.#wristYHistory.length > WRIST_HISTORY) this.#wristYHistory.shift();
@@ -388,7 +389,7 @@ class Theremin {
       const controlHand = leftHand ?? rightHand!;
       targetGain     = gainFromRawY(controlHand[INDEX_TIP].y);
       this.#lastGain = targetGain;
-      if (leftHand) this.#drawHand(leftHand, "#ff6b35");
+      if (leftHand) this.#drawHand(leftHand, VOLUME_COLOR);
     } else {
       targetGain = this.#sustainEnabled ? this.#lastGain : 0;
     }
@@ -452,14 +453,14 @@ class Theremin {
     const { width, height } = canvas;
     const mid    = height / 2;
 
-    ctx.fillStyle = "#0b0b0b";
+    ctx.fillStyle = BG_DEEP;
     ctx.fillRect(0, 0, width, height);
 
     // Color and glow track the pitch color (green) when audible, dim when silent
     const audible = this.#smoothGain > 0.01;
-    ctx.strokeStyle = audible ? "#00ff88" : "rgba(0,255,136,0.18)";
+    ctx.strokeStyle = audible ? PITCH_COLOR : `color-mix(in srgb, ${PITCH_COLOR} 18%, transparent)`;
     ctx.lineWidth   = 1.5;
-    ctx.shadowColor = "#00ff88";
+    ctx.shadowColor = PITCH_COLOR;
     ctx.shadowBlur  = audible ? 6 : 0;
 
     ctx.beginPath();
@@ -477,9 +478,9 @@ class Theremin {
     const ctx    = this.#waveformCtx;
     const { width, height } = this.#waveformCanvas;
 
-    ctx.fillStyle   = "#0b0b0b";
+    ctx.fillStyle   = BG_DEEP;
     ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = "rgba(0,255,136,0.18)";
+    ctx.strokeStyle = `color-mix(in srgb, ${PITCH_COLOR} 18%, transparent)`;
     ctx.lineWidth   = 1;
     ctx.beginPath();
     ctx.moveTo(0,     height / 2);

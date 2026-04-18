@@ -47,10 +47,34 @@ export const SONGS: SongConfig[] = [
     title:            "Say It Ain't So",
     file:             "/songs/Say_It_Ain't_So.mid",
     melodyTrackIndex: 7,
-    // Jazz Guitar and Reggae Guitar are rhythm-guitar doubles; skipping them
-    // halves the backing oscillator count and prevents CPU overload at dense
-    // sections (~2-3 min mark).
+    // Jazz Guitar + Reggae Guitar are rhythm doubles; skipping them halves the
+    // backing oscillator count and prevents CPU overload at dense sections (~2-3 min).
     // skipTracks: ["Jazz Guitar", "Reggae Guitar"],
+  },
+  {
+    title:            "California Dreamin'",
+    file:             "/songs/california_dreaming.mid",
+    melodyTrackIndex: 2, // SaxAlto — carries the vocal melody line
+    // GtrSteel track [6] has 2180 strumming notes (CPU hog); skip both GtrSteel
+    // instances. Separate Snare track is a duplicate of CaliforniaDreaming drums.
+    // skipTracks: ["GtrSteel", "Snare"],
+  },
+  {
+    title:            "My Way",
+    file:             "/songs/my_way.mid",
+    melodyTrackIndex: 4, // "Melody (BB)" — explicit melody track
+  },
+  {
+    title:            "A Natural Woman",
+    file:             "/songs/a_natual_woman.mid", // note: filename has typo
+    melodyTrackIndex: 3, // vibraphone — midi 57–76, carries the vocal melody line
+  },
+  {
+    title:            "What's Up",
+    file:             "/songs/whats_up.mid",
+    melodyTrackIndex: 0, // "Vocals" — explicitly labeled, midi 54–76
+    // Guitar1 has 4877 strumming notes (~17/sec) — skip to avoid CPU overload
+    skipTracks: ["Guitar1"],
   },
 ];
 
@@ -84,14 +108,20 @@ export async function loadSong(config: SongConfig): Promise<ParsedSong> {
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => t.notes.length > 0)
     .map(({ t, i }) => {
-      const name = nameForTrack.get(i) ?? t.name.trim() ?? t.instrument.name;
+      // Use || (not ??) so an empty track name falls through to the instrument
+      // name. Collapse internal whitespace for MIDIs that pad names with spaces.
+      const raw  = nameForTrack.get(i) || t.name.trim() || t.instrument.name;
+      const name = raw.replace(/\s+/g, " ").trim();
+      const isDrum = t.channel === 9;
       return {
         name,
-        // Drop notes shorter than 40 ms — inaudible and just add synthesis load.
+        // Drop notes shorter than 40 ms on melodic tracks — inaudible micro-notes
+        // just add synthesis load. Drum notes are intentionally short (10-20 ms)
+        // so the filter is skipped for drum channels.
         notes: t.notes
-          .filter(n => n.duration >= 0.04)
+          .filter(n => isDrum || n.duration >= 0.04)
           .map(n => ({ time: n.time, duration: n.duration, midi: n.midi })),
-        isDrum: t.channel === 9,
+        isDrum,
       };
     })
     .filter(({ notes }) => notes.length > 0);

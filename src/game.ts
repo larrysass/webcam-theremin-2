@@ -1,5 +1,6 @@
 import * as Tone from "tone";
 import { loadSong, SONGS, type ParsedSong, type SongNote, type SongConfig } from "./song";
+import { PITCH_COLOR, MISS_COLOR, BG_DEEP } from "./tokens";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -9,8 +10,33 @@ const LOOKAHEAD        = 4.0;  // seconds of notes visible ahead of hit line
 const START_DELAY      = 3;    // seconds of pre-roll (countdown) before song
 const HIT_LINE_RATIO   = 0.22; // hit line x position as fraction of canvas width
 const NOTE_HEIGHT      = 14;   // px
-const TOLERANCE        = 2.0;  // semitones — within this = "hit"
 const MIN_GAIN_TO_PLAY = 0.05; // theremin must be audible to count as playing
+
+// ---------------------------------------------------------------------------
+// Scoring ranks
+// ---------------------------------------------------------------------------
+
+const RANKS = [
+  { label: "Perfect", maxDiff: 0.2,      color: "#ffd700" },
+  { label: "Great",   maxDiff: 0.5,      color: "#00ff88" },
+  { label: "Good",    maxDiff: 1.0,      color: "#00ccff" },
+  { label: "OK",      maxDiff: 2.0,      color: "#ff9500" },
+  { label: "Miss",    maxDiff: Infinity, color: "#ff4444" },
+];
+
+const getRank = (diffSemitones: number) =>
+  RANKS.find(r => diffSemitones < r.maxDiff) ?? RANKS[RANKS.length - 1];
+
+const LABEL_DURATION_MS = 800;
+const LABEL_FLOAT_PX    = 32;
+
+interface ScoreLabel {
+  text:      string;
+  color:     string;
+  x:         number;
+  y:         number;
+  startTime: number;
+}
 
 // ---------------------------------------------------------------------------
 // Synth voice definitions per MIDI track name
@@ -50,6 +76,28 @@ const VOICES: Record<string, Voice> = {
   "Flute":                { type: "triangle", volume: -20, attack: 0.03,  decay: 0.05, sustain: 0.8, release: 0.3 },
   // Say It Ain't So
   "Vocal Melody (lyrics)":{ type: "triangle", volume: -6,  attack: 0.02,  decay: 0.05, sustain: 0.9, release: 0.3, polyphony: 4 },
+  // California Dreamin'
+  "SaxAlto":    { type: "sawtooth", volume: -6,  attack: 0.04, decay: 0.05, sustain: 0.8, release: 0.3, polyphony: 4 },
+  // My Way (track names normalized from "Bass    (BB) " → "Bass (BB)" etc.)
+  "Melody (BB)": { type: "triangle", volume: -6,  attack: 0.03, decay: 0.05, sustain: 0.9, release: 0.4, polyphony: 4 },
+  "Piano (BB)":  { type: "triangle", volume: -18, attack: 0.01, decay: 0.3,  sustain: 0.5, release: 0.3, polyphony: 4 },
+  "Guitar (BB)": { type: "triangle", volume: -20, attack: 0.01, decay: 0.4,  sustain: 0.3, release: 0.3, polyphony: 3 },
+  "Bass (BB)":   { type: "triangle", volume: -14, attack: 0.01, decay: 0.2,  sustain: 0.8, release: 0.2, polyphony: 2 },
+  // What's Up
+  "Vocals":        { type: "triangle", volume: -6,  attack: 0.03, decay: 0.05, sustain: 0.9, release: 0.4, polyphony: 4 },
+  "Backup Vocals": { type: "triangle", volume: -22, attack: 0.03, decay: 0.05, sustain: 0.8, release: 0.3, polyphony: 2 },
+  "Guitar2":       { type: "sawtooth", volume: -20, attack: 0.01, decay: 0.05, sustain: 0.9, release: 0.2, polyphony: 3 },
+  // A Natural Woman (unnamed tracks → GM instrument names, lowercase)
+  "vibraphone":        { type: "sine",     volume: -6,  attack: 0.001, decay: 0.4,  sustain: 0.3, release: 0.8, polyphony: 4 },
+  "Words":             { type: "triangle", volume: -16, attack: 0.01,  decay: 0.3,  sustain: 0.5, release: 0.3, polyphony: 4 },
+  "acoustic bass":     { type: "triangle", volume: -14, attack: 0.01,  decay: 0.2,  sustain: 0.8, release: 0.2, polyphony: 2 },
+  "electric piano 1":  { type: "triangle", volume: -20, attack: 0.01,  decay: 0.3,  sustain: 0.6, release: 0.3, polyphony: 3 },
+  "french horn":       { type: "sawtooth", volume: -22, attack: 0.06,  decay: 0.05, sustain: 0.8, release: 0.3, polyphony: 3 },
+  "string ensemble 2": { type: "sawtooth", volume: -20, attack: 0.1,   decay: 0,    sustain: 1,   release: 0.5, polyphony: 3 },
+  "muted trumpet":     { type: "sawtooth", volume: -22, attack: 0.02,  decay: 0.05, sustain: 0.7, release: 0.2, polyphony: 2 },
+  "FretlsBass":{ type: "triangle", volume: -14, attack: 0.02, decay: 0.1,  sustain: 0.9, release: 0.2, polyphony: 2 },
+  "Strings":   { type: "sawtooth", volume: -18, attack: 0.1,  decay: 0,    sustain: 1,   release: 0.5, polyphony: 4 },
+  "StrSyn1":   { type: "sawtooth", volume: -20, attack: 0.08, decay: 0,    sustain: 1,   release: 0.4, polyphony: 4 },
   "Bass Guitar":          { type: "triangle", volume: -14, attack: 0.01,  decay: 0.1,  sustain: 0.9, release: 0.2, polyphony: 2 },
   "Jazz Guitar":          { type: "sawtooth", volume: -22, attack: 0.01,  decay: 0.1,  sustain: 0.7, release: 0.2, polyphony: 6 },
   "Reggae Guitar":        { type: "sawtooth", volume: -22, attack: 0.02,  decay: 0.1,  sustain: 0.6, release: 0.2, polyphony: 6 },
@@ -127,8 +175,10 @@ export class Game {
   #reverb:    Tone.Reverb | null                       = null;
 
   // Scoring
-  #hitFrames   = 0;
-  #totalFrames = 0;
+  #hitFrames    = 0;
+  #totalFrames  = 0;
+  #judgedNotes  = new Set<SongNote>();
+  #scoreLabels: ScoreLabel[] = [];
 
   constructor(
     canvas:         HTMLCanvasElement,
@@ -161,6 +211,8 @@ export class Game {
 
     this.#hitFrames   = 0;
     this.#totalFrames = 0;
+    this.#judgedNotes.clear();
+    this.#scoreLabels = [];
     this.#isRunning   = true;
 
     // Wait for MIDI to finish loading (instant if already resolved)
@@ -306,7 +358,7 @@ export class Game {
     const pixPerSec = (width - hitX) / LOOKAHEAD;
 
     // Background
-    this.#ctx.fillStyle = "#0b0b0b";
+    this.#ctx.fillStyle = BG_DEEP;
     this.#ctx.fillRect(0, 0, width, height);
 
     this.#drawGrid(hitX, width, height, midiMin, midiMax);
@@ -314,6 +366,8 @@ export class Game {
     for (const note of melody) {
       this.#drawNote(note, songTime, hitX, pixPerSec, height, midiMin, midiMax);
     }
+
+    this.#drawLabels();
 
     // Hit line
     this.#ctx.strokeStyle = "rgba(255,255,255,0.2)";
@@ -401,14 +455,28 @@ export class Game {
     let color: string;
     if (isActive) {
       const { freq, gain } = this.#getPlayerState();
-      const playerMidi = 12 * Math.log2(freq / 440) + 69;
-      const hitting    = Math.abs(playerMidi - note.midi) <= TOLERANCE
-                      && gain > MIN_GAIN_TO_PLAY;
-      color = hitting ? "#00ff88" : "#ff4444";
+      const diff = gain > MIN_GAIN_TO_PLAY
+        ? Math.abs(12 * Math.log2(freq / 440) + 69 - note.midi)
+        : Infinity;
+      const rank = getRank(diff);
+
+      color = rank.color;
       this.#totalFrames++;
-      if (hitting) this.#hitFrames++;
-      this.#ctx.shadowColor = color;
+      if (rank.label !== "Miss") this.#hitFrames++;
+      this.#ctx.shadowColor = rank.color;
       this.#ctx.shadowBlur  = 14;
+
+      // Spawn a floating label on the first frame this note becomes active
+      if (!this.#judgedNotes.has(note)) {
+        this.#judgedNotes.add(note);
+        this.#scoreLabels.push({
+          text:      rank.label,
+          color:     rank.color,
+          x:         hitX,
+          y:         y,
+          startTime: performance.now(),
+        });
+      }
     } else if (xEnd < hitX) {
       color = "rgba(255,255,255,0.12)";
     } else {
@@ -422,6 +490,34 @@ export class Game {
     this.#ctx.shadowBlur = 0;
   }
 
+  #drawLabels() {
+    const now = performance.now();
+    // Prune expired labels
+    this.#scoreLabels = this.#scoreLabels.filter(
+      l => now - l.startTime < LABEL_DURATION_MS,
+    );
+
+    const ctx = this.#ctx;
+    ctx.font      = "bold 28px 'Courier New'";
+    ctx.textAlign = "center";
+
+    for (const label of this.#scoreLabels) {
+      const age     = (now - label.startTime) / LABEL_DURATION_MS; // 0 → 1
+      const opacity = 1 - age;
+      const y       = label.y - age * LABEL_FLOAT_PX;
+
+      ctx.globalAlpha = opacity;
+      ctx.shadowColor = label.color;
+      ctx.shadowBlur  = 6;
+      ctx.fillStyle   = label.color;
+      ctx.fillText(label.text, label.x, y);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur  = 0;
+    ctx.textAlign   = "left";
+  }
+
   #drawCursor(hitX: number, height: number, midiMin: number, midiMax: number) {
     const { freq, gain } = this.#getPlayerState();
     if (gain < MIN_GAIN_TO_PLAY) return;
@@ -430,16 +526,16 @@ export class Game {
     const clampedMidi = Math.max(midiMin - 2, Math.min(midiMax + 2, playerMidi));
     const cursorY     = this.#midiToY(clampedMidi, height, midiMin, midiMax);
 
-    this.#ctx.strokeStyle = "rgba(0, 255, 136, 0.85)";
+    this.#ctx.strokeStyle = `color-mix(in srgb, ${PITCH_COLOR} 85%, transparent)`;
     this.#ctx.lineWidth   = 2;
-    this.#ctx.shadowColor = "#00ff88";
+    this.#ctx.shadowColor = PITCH_COLOR;
     this.#ctx.shadowBlur  = 8;
     this.#ctx.beginPath();
     this.#ctx.moveTo(0,         cursorY);
     this.#ctx.lineTo(hitX + 24, cursorY);
     this.#ctx.stroke();
 
-    this.#ctx.fillStyle = "#00ff88";
+    this.#ctx.fillStyle = PITCH_COLOR;
     this.#ctx.beginPath();
     this.#ctx.arc(hitX, cursorY, 5, 0, Math.PI * 2);
     this.#ctx.fill();
@@ -460,7 +556,7 @@ export class Game {
     this.#ctx.font      = `${Math.round(height * 0.13)}px 'Courier New'`;
     this.#ctx.fillText("final score", width / 2, height * 0.35);
 
-    this.#ctx.fillStyle = "#00ff88";
+    this.#ctx.fillStyle = PITCH_COLOR;
     this.#ctx.font      = `bold ${Math.round(height * 0.32)}px 'Courier New'`;
     this.#ctx.fillText(`${pct}%`, width / 2, height * 0.62);
 
